@@ -9,6 +9,6 @@ mkdir -p gebouw
 
 cd gebouw > /dev/null
 
-    g++ -DLINUX_BUILD=1 $opts $code/src/circular.cpp -o circular
+    g++ -DLINUX_BUILD=1 $opts $code/src/circular_test.cpp -o circular-test
 
 cd $code > /dev/null
