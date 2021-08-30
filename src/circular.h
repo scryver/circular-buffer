@@ -9,8 +9,8 @@ struct CircularBuffer
 {
     void *base;
     u64 byteCount;
-    u64 readIndex;
-    u64 writeIndex;
+    volatile u64 readIndex;
+    volatile u64 writeIndex;
     void *platform;
 };
 
@@ -29,6 +29,7 @@ clear(CircularBuffer *buffer)
 CIRCULAR_INTERN u64
 get_size(CircularBuffer *buffer)
 {
+    CIRCULAR_ASSERT(buffer->writeIndex >= buffer->readIndex, "Circular buffer underflow, %lu >= %lu.", buffer->writeIndex, buffer->readIndex);
     u64 result = buffer->writeIndex - buffer->readIndex;
     return result;
 }
@@ -36,6 +37,7 @@ get_size(CircularBuffer *buffer)
 CIRCULAR_INTERN u64
 get_available_size(CircularBuffer *buffer)
 {
+    CIRCULAR_ASSERT(buffer->byteCount >= get_size(buffer), "Circular buffer overflow, %lu >= %lu.", buffer->byteCount, get_size(buffer));
     return buffer->byteCount - get_size(buffer);
 }
 
@@ -48,9 +50,11 @@ get_write_pointer(CircularBuffer *buffer)
 CIRCULAR_INTERN void
 write_advance(CircularBuffer *buffer, u64 byteCount)
 {
-    // TODO(michiel): Maybe add some debug checking here (writeIndex >= readIndex)
+    CIRCULAR_ASSERT(buffer->writeIndex + byteCount <= 2 * buffer->byteCount, "Circular buffer overflow, %lu <= %lu.", buffer->writeIndex + byteCount, 2 * buffer->byteCount);
     // TODO(michiel): This should be atomic to be thread-safe
     buffer->writeIndex += byteCount;
+
+    CIRCULAR_LOG(Info, "Wrote %lu bytes.", byteCount);
 }
 
 CIRCULAR_INTERN void *
@@ -62,13 +66,17 @@ get_read_pointer(CircularBuffer *buffer)
 CIRCULAR_INTERN void
 read_advance(CircularBuffer *buffer, u64 byteCount)
 {
-    // TODO(michiel): Maybe add some debug checking here (readIndex + byteCount <= writeIndex)
+    CIRCULAR_ASSERT(buffer->readIndex + byteCount <= buffer->writeIndex, "Circular buffer underflow, %lu <= %lu.", buffer->readIndex + byteCount, buffer->writeIndex);
     buffer->readIndex += byteCount;
-    
+
     if (buffer->readIndex >= buffer->byteCount)
     {
         buffer->readIndex -= buffer->byteCount;
         // TODO(michiel): This should be atomic to be thread-safe
         buffer->writeIndex -= buffer->byteCount;
+
+        CIRCULAR_LOG(Info, "Rewind %lu bytes.", buffer->byteCount);
     }
+
+    CIRCULAR_LOG(Info, "Read %lu bytes.", byteCount);
 }

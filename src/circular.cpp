@@ -21,8 +21,7 @@ deallocate_circular_buffer(CircularBuffer *buffer)
     }
     else
     {
-        // TODO(michiel): Can we get a error message?
-        fprintf(stderr, "Error deallocating the circular buffer.\n");
+        CIRCULAR_ERROR("Error deallocating the circular buffer.");
     }
 }
 #elif WINDOWS_BUILD
@@ -35,14 +34,14 @@ deallocate_circular_buffer(CircularBuffer *buffer)
         UnmapViewOfFile((u8 *)buffer->base + buffer->byteCount);
         buffer->base = 0;
     }
-    
+
     if (buffer->platform)
     {
         HANDLE handle = (HANDLE)(u64)buffer->platform;
         CloseHandle(handle);
         buffer->platform = 0;
     }
-    
+
     buffer->byteCount = 0;
 }
 #elif LINUX_BUILD
@@ -50,14 +49,14 @@ CIRCULAR_INTERN void
 deallocate_circular_buffer(CircularBuffer *buffer)
 {
     s32 status = munmap(buffer->base, buffer->byteCount << 1);
-    if (status == 0) 
+    if (status == 0)
     {
         buffer->base = 0;
         buffer->byteCount = 0;
     }
     else
     {
-        fprintf(stderr, "Error unmapping the circular buffer: %s\n", strerror(errno));
+        CIRCULAR_ERROR("Error unmapping the circular buffer: %s.", strerror(errno));
     }
 }
 #else
@@ -123,7 +122,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     }
     else
     {
-        fprintf(stderr, "The size of the circular buffer must be a multiple of 64kB.\n");
+        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB.");
     }
 }
 
@@ -180,7 +179,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     }
     else
     {
-        fprintf(stderr, "The size of the circular buffer must be a multiple of 64kB.\n");
+        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB.");
     }
 }
 
@@ -205,15 +204,15 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
                 status = ftruncate(fd, size);
                 if (status == 0)
                 {
-                    buffer->base = mmap(0, size << 1, 
+                    buffer->base = mmap(0, size << 1,
                                         PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
                     if (buffer->base != MAP_FAILED)
                     {
-                        void *map1 = mmap(buffer->base, size, 
+                        void *map1 = mmap(buffer->base, size,
                                           PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
                         if (map1 == buffer->base)
                         {
-                            void *map2 = mmap((u8 *)buffer->base + size, size, 
+                            void *map2 = mmap((u8 *)buffer->base + size, size,
                                               PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
                             if (map2 == ((u8 *)buffer->base + size))
                             {
@@ -222,45 +221,45 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
                             else
                             {
                                 deallocate_circular_buffer(buffer);
-                                fprintf(stderr, "Couldn't map the second part of the circular buffer.\n");
+                                CIRCULAR_ERROR("Couldn't map the second part of the circular buffer.");
                             }
                         }
                         else
                         {
                             deallocate_circular_buffer(buffer);
-                            fprintf(stderr, "Couldn't map the first part of the circular buffer.\n");
+                            CIRCULAR_ERROR("Couldn't map the first part of the circular buffer.");
                         }
                     }
                     else
                     {
                         buffer->base = 0;
-                        fprintf(stderr, "Couldn't map the amount of memory needed.\n");
+                        CIRCULAR_ERROR("Couldn't map the amount of memory needed.");
                     }
                 }
                 else
                 {
-                    fprintf(stderr, "Couldn't truncate the temp file to the appropiate byte size: %s\n", strerror(errno));
+                    CIRCULAR_ERROR("Couldn't truncate the temp file to the appropiate byte size: %s", strerror(errno));
                 }
             }
             else
             {
-                fprintf(stderr, "Couldn't unlink the temp path: %s\n", strerror(errno));
+                CIRCULAR_ERROR("Couldn't unlink the temp path: %s", strerror(errno));
             }
-            
+
             status = close(fd);
             if (status)
             {
-                fprintf(stderr, "Error happened while closing the temp file: %s\n", strerror(errno));
+                CIRCULAR_ERROR("Error happened while closing the temp file: %s", strerror(errno));
             }
         }
         else
         {
-            fprintf(stderr, "Couldn't make a temp path: %s\n", strerror(errno));
+            CIRCULAR_ERROR("Couldn't make a temp path: %s", strerror(errno));
         }
     }
     else
     {
-        fprintf(stderr, "The size of the circular buffer must be a multiple of 64kB.\n");
+        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB.");
     }
 }
 

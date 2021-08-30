@@ -1,4 +1,8 @@
 
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
 #include "circular.h"
 
 #if LINUX_BUILD
@@ -20,17 +24,13 @@
 #include <Windows.h>
 #endif
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-
 #include "circular.cpp"
 
 s32 main(s32 argCount, char **arguments)
 {
     CircularBuffer testBuf;
     allocate_circular_buffer(&testBuf, 3 * 64 * 1024);
-    
+
     // NOTE(michiel): Should output:
     // R: 23992, W: 24000
     // R: 47984, W: 48000
@@ -42,7 +42,7 @@ s32 main(s32 argCount, char **arguments)
     // R: 191936, W: 192000
     // R: 19320, W: 19392
     // R: 43312, W: 43392
-    
+
     if (testBuf.base && testBuf.byteCount)
     {
         for (u32 testRun = 0; testRun < 10; ++testRun)
@@ -59,6 +59,6 @@ s32 main(s32 argCount, char **arguments)
             fprintf(stdout, "R: %lu, W: %lu\n", testBuf.readIndex, testBuf.writeIndex);
         }
     }
-    
+
     return 0;
 }
