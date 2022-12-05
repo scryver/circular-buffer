@@ -58,6 +58,20 @@ s32 main(s32 argCount, char **arguments)
             }
             fprintf(stdout, "R: %lu, W: %lu\n", testBuf.readIndex, testBuf.writeIndex);
         }
+
+        for (u32 testRun = 0; testRun < 10; ++testRun)
+        {
+            for (u32 testIndex = 0; testIndex < 20; ++testIndex)
+            {
+                memset(get_write_pointer(&testBuf), testIndex, 3000);
+                write_advance(&testBuf, 3000);
+            }
+            for (u32 testIndex = 0; testIndex < 8; ++testIndex)
+            {
+                read_advance(&testBuf, 2999);
+            }
+            fprintf(stdout, "R: %lu, W: %lu\n", testBuf.readIndex, testBuf.writeIndex);
+        }
     }
 
     return 0;

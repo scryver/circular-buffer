@@ -42,22 +42,6 @@ get_available_size(CircularBuffer *buffer)
 }
 
 CIRCULAR_INTERN void *
-get_write_pointer(CircularBuffer *buffer)
-{
-    return (u8 *)buffer->base + buffer->writeIndex;
-}
-
-CIRCULAR_INTERN void
-write_advance(CircularBuffer *buffer, u64 byteCount)
-{
-    CIRCULAR_ASSERT(buffer->writeIndex + byteCount <= 2 * buffer->byteCount, "Circular buffer overflow, %lu <= %lu.", buffer->writeIndex + byteCount, 2 * buffer->byteCount);
-    // TODO(michiel): This should be atomic to be thread-safe
-    buffer->writeIndex += byteCount;
-
-    CIRCULAR_LOG(Info, "Wrote %lu bytes.", byteCount);
-}
-
-CIRCULAR_INTERN void *
 get_read_pointer(CircularBuffer *buffer)
 {
     return (u8 *)buffer->base + buffer->readIndex;
@@ -79,4 +63,26 @@ read_advance(CircularBuffer *buffer, u64 byteCount)
     }
 
     CIRCULAR_LOG(Info, "Read %lu bytes.", byteCount);
+}
+
+CIRCULAR_INTERN void *
+get_write_pointer(CircularBuffer *buffer)
+{
+    return (u8 *)buffer->base + buffer->writeIndex;
+}
+
+CIRCULAR_INTERN void
+write_advance(CircularBuffer *buffer, u64 byteCount)
+{
+    CIRCULAR_ASSERT(buffer->writeIndex + byteCount <= 2 * buffer->byteCount, "Circular buffer overflow, %lu <= %lu.", buffer->writeIndex + byteCount, 2 * buffer->byteCount);
+    // TODO(michiel): This should be atomic to be thread-safe
+    buffer->writeIndex = buffer->writeIndex + byteCount;
+    if ((buffer->writeIndex - buffer->readIndex) > buffer->byteCount)
+    {
+        u64 snoopBytes = (buffer->writeIndex - buffer->byteCount) - buffer->readIndex;
+        CIRCULAR_LOG(Info, "Overflow, snooping up %lu bytes.", snoopBytes);
+        read_advance(buffer, snoopBytes);
+    }
+
+    CIRCULAR_LOG(Info, "Wrote %lu bytes.", byteCount);
 }

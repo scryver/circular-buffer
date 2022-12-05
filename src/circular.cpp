@@ -194,57 +194,58 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     buffer->writeIndex = 0;
     if (is_64k_mult(size))
     {
-        char tempPath[] = "/dev/shm/circ-buf-XXXXXX";
-        s32 fd = mkstemp(tempPath);
+        s32 fd = memfd_create("/circbuf", 0);
+        //char tempPath[] = "/dev/shm/circ-buf-XXXXXX";
+        //s32 fd = mkstemp(tempPath);
         if (fd >= 0)
         {
-            s32 status = unlink(tempPath);
+            //s32 status = unlink(tempPath);
+            //if (status == 0)
+            //{
+            s32 status = ftruncate(fd, size);
             if (status == 0)
             {
-                status = ftruncate(fd, size);
-                if (status == 0)
+                buffer->base = mmap(0, size << 1,
+                                    PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+                if (buffer->base != MAP_FAILED)
                 {
-                    buffer->base = mmap(0, size << 1,
-                                        PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-                    if (buffer->base != MAP_FAILED)
+                    void *map1 = mmap(buffer->base, size,
+                                      PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
+                    if (map1 == buffer->base)
                     {
-                        void *map1 = mmap(buffer->base, size,
+                        void *map2 = mmap((u8 *)buffer->base + size, size,
                                           PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
-                        if (map1 == buffer->base)
+                        if (map2 == ((u8 *)buffer->base + size))
                         {
-                            void *map2 = mmap((u8 *)buffer->base + size, size,
-                                              PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
-                            if (map2 == ((u8 *)buffer->base + size))
-                            {
-                                buffer->byteCount = size;
-                            }
-                            else
-                            {
-                                deallocate_circular_buffer(buffer);
-                                CIRCULAR_ERROR("Couldn't map the second part of the circular buffer.");
-                            }
+                            buffer->byteCount = size;
                         }
                         else
                         {
                             deallocate_circular_buffer(buffer);
-                            CIRCULAR_ERROR("Couldn't map the first part of the circular buffer.");
+                            CIRCULAR_ERROR("Couldn't map the second part of the circular buffer.");
                         }
                     }
                     else
                     {
-                        buffer->base = 0;
-                        CIRCULAR_ERROR("Couldn't map the amount of memory needed.");
+                        deallocate_circular_buffer(buffer);
+                        CIRCULAR_ERROR("Couldn't map the first part of the circular buffer.");
                     }
                 }
                 else
                 {
-                    CIRCULAR_ERROR("Couldn't truncate the temp file to the appropiate byte size: %s", strerror(errno));
+                    buffer->base = 0;
+                    CIRCULAR_ERROR("Couldn't map the amount of memory needed.");
                 }
             }
             else
             {
-                CIRCULAR_ERROR("Couldn't unlink the temp path: %s", strerror(errno));
+                CIRCULAR_ERROR("Couldn't truncate the temp file to the appropiate byte size: %s", strerror(errno));
             }
+            //}
+            //else
+            //{
+            //CIRCULAR_ERROR("Couldn't unlink the temp path: %s", strerror(errno));
+            //}
 
             status = close(fd);
             if (status)
