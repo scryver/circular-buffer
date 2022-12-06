@@ -7,11 +7,10 @@
 
 struct CircularBuffer
 {
-    void *base;
-    u64 byteCount;
+    u8 *base;
+    u64 indexMask;
     volatile u64 readIndex;
     volatile u64 writeIndex;
-    void *platform;
 };
 
 #define is_64k_mult(x)   (((x) & 0xFFFF) == 0)
@@ -27,9 +26,8 @@ clear(CircularBuffer *buffer)
 }
 
 CIRCULAR_INTERN u64
-get_size(CircularBuffer *buffer)
+get_filled_size(CircularBuffer *buffer)
 {
-    CIRCULAR_ASSERT(buffer->writeIndex >= buffer->readIndex, "Circular buffer underflow, %lu >= %lu.", buffer->writeIndex, buffer->readIndex);
     u64 result = buffer->writeIndex - buffer->readIndex;
     return result;
 }
@@ -37,52 +35,33 @@ get_size(CircularBuffer *buffer)
 CIRCULAR_INTERN u64
 get_available_size(CircularBuffer *buffer)
 {
-    CIRCULAR_ASSERT(buffer->byteCount >= get_size(buffer), "Circular buffer overflow, %lu >= %lu.", buffer->byteCount, get_size(buffer));
-    return buffer->byteCount - get_size(buffer);
+    return (buffer->indexMask + 1) - get_filled_size(buffer);
 }
 
 CIRCULAR_INTERN void *
 get_read_pointer(CircularBuffer *buffer)
 {
-    return (u8 *)buffer->base + buffer->readIndex;
+    return buffer->base + (buffer->readIndex & buffer->indexMask);
 }
 
 CIRCULAR_INTERN void
 read_advance(CircularBuffer *buffer, u64 byteCount)
 {
-    CIRCULAR_ASSERT(buffer->readIndex + byteCount <= buffer->writeIndex, "Circular buffer underflow, %lu <= %lu.", buffer->readIndex + byteCount, buffer->writeIndex);
+    CIRCULAR_ASSERT(byteCount <= get_filled_size(buffer), "Circular buffer underflow, %lu <= %lu.", byteCount, get_filled_size(buffer));
     buffer->readIndex += byteCount;
-
-    if (buffer->readIndex >= buffer->byteCount)
-    {
-        buffer->readIndex -= buffer->byteCount;
-        // TODO(michiel): This should be atomic to be thread-safe
-        buffer->writeIndex -= buffer->byteCount;
-
-        CIRCULAR_LOG(Info, "Rewind %lu bytes.", buffer->byteCount);
-    }
-
     CIRCULAR_LOG(Info, "Read %lu bytes.", byteCount);
 }
 
 CIRCULAR_INTERN void *
 get_write_pointer(CircularBuffer *buffer)
 {
-    return (u8 *)buffer->base + buffer->writeIndex;
+    return buffer->base + (buffer->writeIndex & buffer->indexMask);
 }
 
 CIRCULAR_INTERN void
 write_advance(CircularBuffer *buffer, u64 byteCount)
 {
-    CIRCULAR_ASSERT(buffer->writeIndex + byteCount <= 2 * buffer->byteCount, "Circular buffer overflow, %lu <= %lu.", buffer->writeIndex + byteCount, 2 * buffer->byteCount);
-    // TODO(michiel): This should be atomic to be thread-safe
-    buffer->writeIndex = buffer->writeIndex + byteCount;
-    if ((buffer->writeIndex - buffer->readIndex) > buffer->byteCount)
-    {
-        u64 snoopBytes = (buffer->writeIndex - buffer->byteCount) - buffer->readIndex;
-        CIRCULAR_LOG(Info, "Overflow, snooping up %lu bytes.", snoopBytes);
-        read_advance(buffer, snoopBytes);
-    }
-
+    CIRCULAR_ASSERT(byteCount <= get_available_size(buffer), "Circular buffer overflow, %lu <= %lu.", byteCount, get_available_size(buffer));
+    buffer->writeIndex += byteCount;
     CIRCULAR_LOG(Info, "Wrote %lu bytes.", byteCount);
 }

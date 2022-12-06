@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#define CIRCULAR_LOG(...)
+
 #include "circular.h"
 
 #if LINUX_BUILD
@@ -43,7 +45,7 @@ s32 main(s32 argCount, char **arguments)
     // R: 19320, W: 19392
     // R: 43312, W: 43392
 
-    if (testBuf.base && testBuf.byteCount)
+    if (testBuf.base && testBuf.indexMask)
     {
         for (u32 testRun = 0; testRun < 10; ++testRun)
         {

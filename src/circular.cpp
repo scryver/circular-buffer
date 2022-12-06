@@ -10,66 +10,28 @@
 //     Ref: https://en.wikipedia.org/w/index.php?title=Circular_buffer&oldid=600431497
 
 #if APPLE_BUILD
+
 CIRCULAR_INTERN void
 deallocate_circular_buffer(CircularBuffer *buffer)
 {
-    kern_return_t status = vm_deallocate(mach_task_self(), (vm_address_t)buffer->base, buffer->byteCount << 1);
+    u64 byteCount = buffer->indexMask + 1;
+    kern_return_t status = vm_deallocate(mach_task_self(), (vm_address_t)buffer->base, byteCount << 1);
     if (status == KERN_SUCCESS)
     {
         buffer->base = 0;
-        buffer->byteCount = 0;
+        buffer->indexMask = 0;
     }
     else
     {
         CIRCULAR_ERROR("Error deallocating the circular buffer.");
     }
 }
-#elif WINDOWS_BUILD
-CIRCULAR_INTERN void
-deallocate_circular_buffer(CircularBuffer *buffer)
-{
-    if (buffer->base)
-    {
-        UnmapViewOfFile(buffer->base);
-        UnmapViewOfFile((u8 *)buffer->base + buffer->byteCount);
-        buffer->base = 0;
-    }
-
-    if (buffer->platform)
-    {
-        HANDLE handle = (HANDLE)(u64)buffer->platform;
-        CloseHandle(handle);
-        buffer->platform = 0;
-    }
-
-    buffer->byteCount = 0;
-}
-#elif LINUX_BUILD
-CIRCULAR_INTERN void
-deallocate_circular_buffer(CircularBuffer *buffer)
-{
-    s32 status = munmap(buffer->base, buffer->byteCount << 1);
-    if (status == 0)
-    {
-        buffer->base = 0;
-        buffer->byteCount = 0;
-    }
-    else
-    {
-        CIRCULAR_ERROR("Error unmapping the circular buffer: %s.", strerror(errno));
-    }
-}
-#else
-#error NO PLATFORM DEFINED
-#endif
-
-#if APPLE_BUILD
 
 CIRCULAR_INTERN void
 allocate_circular_buffer(CircularBuffer *buffer, u64 size)
 {
     buffer->base = 0;
-    buffer->byteCount = 0;
+    buffer->indexMask = 0;
     buffer->readIndex = 0;
     buffer->writeIndex = 0;
     if (is_64k_mult(size))
@@ -90,7 +52,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
                                       mach_task_self(), (vm_address_t)buffer->base, 0, &curProtection, &maxProtection, VM_INHERIT_COPY);
                     if (status == KERN_SUCCESS)
                     {
-                        buffer->byteCount = size;
+                        buffer->indexMask = size - 1;
                     }
                     else if (status == KERN_NO_SPACE)
                     {
@@ -128,6 +90,19 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
 
 #elif WINDOWS_BUILD
 
+CIRCULAR_INTERN void
+deallocate_circular_buffer(CircularBuffer *buffer)
+{
+    if (buffer->base)
+    {
+        UnmapViewOfFile(buffer->base);
+        UnmapViewOfFile(buffer->base + buffer->indexMask + 1);
+    }
+
+    buffer->base = 0;
+    buffer->indexMask = 0;
+}
+
 CIRCULAR_INTERN void *
 determine_viable_address(u64 size)
 {
@@ -142,7 +117,7 @@ CIRCULAR_INTERN void
 allocate_circular_buffer(CircularBuffer *buffer, u64 size)
 {
     buffer->base = 0;
-    buffer->byteCount = 0;
+    buffer->indexMask = 0;
     buffer->readIndex = 0;
     buffer->writeIndex = 0;
     if (is_64k_mult(size))
@@ -156,13 +131,12 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
                 HANDLE mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, (u32)(allocSize >> 32), (u32)(allocSize & 0xFFFFFFFF), 0);
                 if (mapping)
                 {
-                    buffer->platform = (void *)(u64)mapping;
-                    buffer->base = MapViewOfFileEx(mapping, FILE_MAP_ALL_ACCESS, 0, 0, size, target);
+                    buffer->base = (u8 *)MapViewOfFileEx(mapping, FILE_MAP_ALL_ACCESS, 0, 0, size, target);
                     if (buffer->base)
                     {
                         if (MapViewOfFileEx(mapping, FILE_MAP_ALL_ACCESS, 0, 0, size, (u8 *)target + size))
                         {
-                            buffer->byteCount = size;
+                            buffer->indexMask = size - 1;
                         }
                         else
                         {
@@ -173,6 +147,12 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
                     {
                         deallocate_circular_buffer(buffer);
                     }
+
+                    CloseHandle(mapping);
+                }
+                else
+                {
+                    CIRCULAR_ERROR("Couldn't create a file mapping: %d", GetLastError());
                 }
             }
         }
@@ -186,27 +166,37 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
 #elif LINUX_BUILD
 
 CIRCULAR_INTERN void
+deallocate_circular_buffer(CircularBuffer *buffer)
+{
+    u64 byteCount = buffer->indexMask + 1;
+    s32 status = munmap(buffer->base, byteCount << 1);
+    if (status == 0)
+    {
+        buffer->base = 0;
+        buffer->indexMask = 0;
+    }
+    else
+    {
+        CIRCULAR_ERROR("Error unmapping the circular buffer: %s.", strerror(errno));
+    }
+}
+
+CIRCULAR_INTERN void
 allocate_circular_buffer(CircularBuffer *buffer, u64 size)
 {
     buffer->base = 0;
-    buffer->byteCount = 0;
+    buffer->indexMask = 0;
     buffer->readIndex = 0;
     buffer->writeIndex = 0;
     if (is_64k_mult(size))
     {
         s32 fd = memfd_create("/circbuf", 0);
-        //char tempPath[] = "/dev/shm/circ-buf-XXXXXX";
-        //s32 fd = mkstemp(tempPath);
         if (fd >= 0)
         {
-            //s32 status = unlink(tempPath);
-            //if (status == 0)
-            //{
             s32 status = ftruncate(fd, size);
             if (status == 0)
             {
-                buffer->base = mmap(0, size << 1,
-                                    PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+                buffer->base = (u8 *)mmap(0, size << 1, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
                 if (buffer->base != MAP_FAILED)
                 {
                     void *map1 = mmap(buffer->base, size,
@@ -217,7 +207,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
                                           PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
                         if (map2 == ((u8 *)buffer->base + size))
                         {
-                            buffer->byteCount = size;
+                            buffer->indexMask = size - 1;
                         }
                         else
                         {
@@ -241,11 +231,6 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
             {
                 CIRCULAR_ERROR("Couldn't truncate the temp file to the appropiate byte size: %s", strerror(errno));
             }
-            //}
-            //else
-            //{
-            //CIRCULAR_ERROR("Couldn't unlink the temp path: %s", strerror(errno));
-            //}
 
             status = close(fd);
             if (status)
