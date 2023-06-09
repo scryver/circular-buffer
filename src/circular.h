@@ -3,6 +3,10 @@
 #if CIRCULAR_TYPES
 #include <stdint.h>
 #include "circ_types.h"
+
+#define is_pow2(x)       ((x) && (((x) & ((x) - 1)) == 0))
+#define is_64k_mult(x)   (((x) & 0xFFFF) == 0)
+
 #endif
 
 struct CircularBuffer
@@ -12,8 +16,6 @@ struct CircularBuffer
     volatile u64 readIndex;
     volatile u64 writeIndex;
 };
-
-#define is_64k_mult(x)   (((x) & 0xFFFF) == 0)
 
 CIRCULAR_INTERN void allocate_circular_buffer(CircularBuffer *buffer, u64 size);
 CIRCULAR_INTERN void deallocate_circular_buffer(CircularBuffer *buffer);

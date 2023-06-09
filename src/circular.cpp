@@ -34,7 +34,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     buffer->indexMask = 0;
     buffer->readIndex = 0;
     buffer->writeIndex = 0;
-    if (is_64k_mult(size))
+    if (is_64k_mult(size) && is_pow2(size))
     {
         u32 numTries = 10;
         while (!buffer->base && (numTries-- != 0))
@@ -84,7 +84,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     }
     else
     {
-        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB.");
+        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB and power of 2.");
     }
 }
 
@@ -120,7 +120,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     buffer->indexMask = 0;
     buffer->readIndex = 0;
     buffer->writeIndex = 0;
-    if (is_64k_mult(size))
+    if (is_64k_mult(size) && is_pow2(size))
     {
         u32 numTries = 10;
         while (!buffer->base && (numTries-- != 0))
@@ -159,7 +159,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     }
     else
     {
-        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB.");
+        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB and power of 2.");
     }
 }
 
@@ -188,7 +188,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     buffer->indexMask = 0;
     buffer->readIndex = 0;
     buffer->writeIndex = 0;
-    if (is_64k_mult(size))
+    if (is_64k_mult(size) && is_pow2(size))
     {
         s32 fd = memfd_create("/circbuf", 0);
         if (fd >= 0)
@@ -245,7 +245,7 @@ allocate_circular_buffer(CircularBuffer *buffer, u64 size)
     }
     else
     {
-        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB.");
+        CIRCULAR_ERROR("The size of the circular buffer must be a multiple of 64kB and power of 2.");
     }
 }
 
